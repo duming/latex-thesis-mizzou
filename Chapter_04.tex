@@ -1,0 +1,68 @@
+\chapter{System design and implementation detail}
+	\label{CH_04}
+Deep learning in these days are not just simply building a model, train it on training set and test it on testing set. On one hand, there is a common trend in recent development of new network architectures. That is modularization, instead of finding a best architecture for a certain task, the most exciting and successful techniques are focusing on finding modules or strategy that can be add to current architectures and improve the performance. For example, dropout and batch normalization are layers that can be add after every activation in order to speed up the learning and prevent overfitting. And residue net and inception \cite{szegedy2015going} construct their structure by stacking modules repeatedly. So a good deep learning program should be able to easily add or remove certain module or function to/from the model. On the other hand, while the network architecture becoming more complex and the dateset getting bigger, the training time are getting longer and often need to run the program on GPU, multi-GPUs or clusters. In order to meet different requirements without changing the program too much, a robust and flexible program are needed. Fortunately, TensorFlow provides excellent building blocks to build such programs and in the following sections, I will introduce the design and TensorFlow implementation of a system that has training, validation, testing, inference, logging, monitoring and save/restore functions.
+
+\section{System design}
+\subsection{A brief introduce of TensorFlow mechanism}
+The unique way of how TensorFlow works have a huge influence on the system design fashion. So it's important to have some understanding of TensorFow, before we start talking about the system. \par
+There are two major parts in every TensorFlow program, that is graph and session.
+\begin{enumerate}
+   \item Graph: a computational model contains all the operation you want to perform on the dataset.
+   \begin{itemize}
+     \item The graph is only a data structure record all the operations that will be executed when data feed into the graph. 
+     \item The graph can't run by itself, it need a session to provide the running environment.
+     \item Once the graph is finalized, the structure of the graph can not be changed anymore.
+   \end{itemize}
+   \item Session: encapsulates the environment for a graph to be executed.
+   \begin{itemize}
+       \item the environment include data input/output, multithread coordinator, save/restore mechanism, logging and monitor. 
+       \item Training, validation, and early stopping will handled by session
+   \end{itemize}
+\end{enumerate}
+
+
+\subsection{overall design}
+As illustrate in Figure \ref{fig:system}, the system has four module in general:
+\begin{enumerate}
+   \item Main module: The most important module in the system, contains the network architecture described in Chapter \ref{CH_03}. And inside the main module, there are three sub-modules in order to separate the training validation and inference procedure. This design makes it possible to run the training, validation and inference procedure using different threads and on different devices(CPUs/GPUs). 
+   \item Input module: There are several different data input method in TensorFlow(From memory from files etc.). So the input module handles the different input from different source and different formats. This module separate the main module from the data by providing a standard input interface.
+   \item Monitor module: This is a utility module that help keep track the training process in real time. This module will run in a separate thread and save requested intermediate results and statistics to log file periodically. And these results can be visualized using TensorBoard in real time.
+   \item Save and restore module: It's common for a deep neural network to train for days. And there are also many things can interrupt the training(power down, run out of memory, pause by user etc.). So it's really helpful to have a module to save checkpoint files periodically and  
+   restore the training procedure when the user want to continue training.
+\end{enumerate}
+
+\begin{figure}[H] 
+	\centering
+	\includegraphics[width=4in]{Figures/system}
+	\caption[Detail inside recurrent unit]{Illustration of recurrent network}
+	\label{fig:system}
+\end{figure}
+
+
+\subsection{training, evaluation, inference module design}
+Now let's further demonstrate the detail of the main module in Figure \ref{fig:system}. As illustrate in Figure \ref{fig:system_detail} the main module have three different sub-modules, they are training, evaluation and inference. According to different functionality, they have different components. The simplest one is the inference module. This module is only used when user already have a trained model and what to predict the secondary structures for new proteins. The only output is the prediction. The other relative simple one is the Evaluation model, this module is useful when user want to calculate the model performance on certain dataset. So beside prediction, this module also calculate the accuracy and loss. The last module is the training module, which calculate the gradient and update the correspond parameters in the model.\par
+
+The following pseudo code is a pipeline for training a deep neural network. Generally speaking, when training a network,  it's better to evaluate the training model in real time. In this way we can save running time by early stopping the training when the model start overfitting or the improvement is really small. This approach also saves disk space, because at each time the system only need to save two checkpoint files, one file records the current training process, the other records the best model which is the one with the highest validation accuracy.
+
+\begin{program}
+\mbox{\textbf{ Training pipeline} }
+\BEGIN \\ 
+\WHILE iteration \lt max\_iteration \DO 
+    \CALL |training\.run\_one\_batch|()
+    \IF time to validate 
+        \CALL |valid_accuracy| = |validation|()
+        \IF |valid_accuracy| \gt |best_accuracy|
+                  \CALL |save\_model|()
+                  best_accuracy = valid_accuracy\FI
+    \IF \CALL |should_early|() == |True|
+        break
+    
+\end{program}
+
+
+\begin{figure}[H] 
+	\centering
+	\includegraphics[width=5in]{Figures/system_detail}
+	\caption[Detail inside recurrent unit]{Illustration of recurrent network}
+	\label{fig:system_detail}
+\end{figure}
