@@ -42,7 +42,8 @@ As illustrate in Figure \ref{fig:system}, the system has four module in general:
 \subsection{training, evaluation, inference module design}
 Now let's further demonstrate the detail of the main module in Figure \ref{fig:system}. As illustrate in Figure \ref{fig:system_detail} the main module have three different sub-modules, they are training, evaluation and inference. According to different functionality, they have different components. The simplest one is the inference module. This module is only used when user already have a trained model and what to predict the secondary structures for new proteins. The only output is the prediction. The other relative simple one is the Evaluation model, this module is useful when user want to calculate the model performance on certain dataset. So beside prediction, this module also calculate the accuracy and loss. The last module is the training module, which calculate the gradient and update the correspond parameters in the model.\par
 
-The following pseudo code is a pipeline for training a deep neural network. Generally speaking, when training a network,  it's better to evaluate the training model in real time. In this way we can save running time by early stopping the training when the model start overfitting or the improvement is really small. This approach also saves disk space, because at each time the system only need to save two checkpoint files, one file records the current training process, the other records the best model which is the one with the highest validation accuracy.
+The following pseudo code is a pipeline for training a deep neural network. Generally speaking, when training a network,  it's better to evaluate the training model in real time. In this way we can save running time by early stopping the training when the model start overfitting or the improvement is really small. Comparing to the method that save a series of candidate best models. This approach also saves disk space, because at each time the system only need to keep two checkpoint files, one file records the current training process, the other records the best model which is the one with the highest validation accuracy.\par
+
 
 \begin{program}
 \mbox{\textbf{ Training pipeline} }
@@ -59,10 +60,77 @@ The following pseudo code is a pipeline for training a deep neural network. Gene
     
 \end{program}
 
+The most straightforward way to implement the training pipeline with validation and early stopping is only build one model and switch the input dataset for training or validation. However it's not a good idea in practice. The disadvantages are the following:
 
+\begin{enumerate}
+   \item There are different input methods for data in memory and data on hard disk. In FensorFlow you can not switch between this two methods for a single model. Because the input method is part of the Graph and can not be modified once the graph finish building.
+   \item If only one model is built for training and validation, the output and statistics of training and validation will be mixed together, since the monitor and output operator is also parts of the TensorFlow Graph, and can not be modified after the building phase. 
+   
+\end{enumerate}
+So with different modules for different purposes in the graph, we can have separate input, output and monitor method for each module. When we want to train a model with validation, we can first build the training module, and then build a Evaluation module with validate dataset. And the two modules are set to share the same model parameters, to make sure the validation module are actually using learned model. When we need test result on test dataset, only a evaluation module will be build with test dataset, and the model will be initialized using saved model on hard disk.
 \begin{figure}[H] 
 	\centering
 	\includegraphics[width=5in]{Figures/system_detail}
 	\caption[Detail inside recurrent unit]{Illustration of recurrent network}
 	\label{fig:system_detail}
 \end{figure}
+
+\subsection{Implementation details}
+\subsection{Input}
+% introduce batch
+In the network architecture discussed in Chapter \ref{CH_03}, the input is a single training example. However in practice, the input should always be a batch of multiple examples. In this case, the batch contain 64 protein sequences. And each protein sequence are normalized to 700 hundred length(protein shorter than 700 hundred pad with zeros and protein longer than 700 are cut into segments).  Figure \ref{fig:len_dist} shows the distribution of protein length, the mean value is 208, most of the proteins are shorter than 300. So in each batch, there will be more than half of the data in it are zero paddings. And these zero paddings are actual affect the performance of the network, which I will show in following sections. So in order to deal with zero paddings, besides the original input data, the length of each protein will also add to each batch. So each batch will have a shape of [64, 700, 42 + 1].
+
+\begin{figure}[H] 
+	\centering
+	\includegraphics[width=5in]{Figures/length_distribution}
+	\caption[Detail inside recurrent unit]{Illustration of recurrent network}
+	\label{fig:len_dist}
+\end{figure}
+
+There are two major data input method in general. Input data from memory and input data from disk. The most popular way you will found in TensorFlow tutorials or examples are input data from memory. That is read all the data into memory and prepare each batch by your self. This method is easy to use, and user have more control of the input process. However when you can not put all the data into memory, this method is inadequate. TensorFlow also provides a build-in method for reading data from file. Users can convert all data into TensorFlows default binary format, or provide reader functions. Then TensorFlow will help you handle the data input process, as long as user provides the list of input file names. As illustrate in Figure \ref{fig:input}, a file name queue and a data queue are built as input buffer. For each step the model will read a batch from the data queue. 
+
+In this project, training module is using the file input pipeline. However evaluation module is using the light weight memory input method, since testing and validation data are usually have small size and only need to scan through the data only once for evaluation. 
+
+\begin{figure}[H] 
+	\centering
+	\includegraphics[width=5in]{Figures/input}
+	\caption[Detail inside recurrent unit]{Illustration of recurrent network}
+	\label{fig:input}
+\end{figure}
+
+
+\subsection{multi-scale convolution}
+
+\subsection{recurrent layer}
+When implementing the recurrent layer, there are two things should be considered. 
+\begin{enumerate}
+   \item Use dynamic RNN or a static RNN.
+   \item When shoul RNN stop calculating for each batch.
+\end{enumerate}
+In TensorFlow and most other deep learning libraries, there are two common RNN versions: static RNN and dynamic RNN. Dynamic RNN is pretty much what RNN should be like, it use a loop structure to process variable lenght of sequences. The static one, however, unrolls the loop and have a fixed size of computational node to process fixed length sequences, just as what Figure \ref{fig:1} shows. 
+\begin{table}[H]
+	\centering
+	\begin{tabular}{lllrrr}
+	\hline
+	\multicolumn{3}{c}{Model} &
+	\multicolumn{3}{c}{Performance}\\
+	\cline{1-3}
+	Multi conv & RNN  & Output layers &  Build time(s) & speed(batch/s) & test accuracy(\%)\\
+	\hline
+	32 channels &- &conv 11 \\
+	64 channels &- &conv 11 \\
+	64 channels & \begin{tabular}{@{}c@{}}1 layer \\ static 32\end{tabular} &conv 11 \\
+	64 channels & \begin{tabular}{@{}c@{}}1 layer \\ dynamic 32\end{tabular} &conv 11 \\
+	64 channels & \begin{tabular}{@{}c@{}}1 layer \\ dynamic 2\end{tabular} &conv 11 \\
+	64 channels & \begin{tabular}{@{}c@{}}1 layer \\ dynamic 10\end{tabular} &conv 11 \\
+	64 channels & \begin{tabular}{@{}c@{}}1 layer \\ dynamic 128\end{tabular} &conv 11 \\
+
+	\hline
+	\end{tabular}
+	\caption[Odd foods]{Another table which will show up in the the List of Tables as `Odd foods'; it is set to align ``here" in the text.}
+\end{table}
+
+\subsection{output layers}
+
+\subsection{loss function}
+
