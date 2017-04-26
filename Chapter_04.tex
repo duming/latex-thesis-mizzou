@@ -107,30 +107,59 @@ When implementing the recurrent layer, there are two things should be considered
    \item Use dynamic RNN or a static RNN.
    \item When shoul RNN stop calculating for each batch.
 \end{enumerate}
-In TensorFlow and most other deep learning libraries, there are two common RNN versions: static RNN and dynamic RNN. Dynamic RNN is pretty much what RNN should be like, it use a loop structure to process variable lenght of sequences. The static one, however, unrolls the loop and have a fixed size of computational node to process fixed length sequences, just as what Figure \ref{fig:1} shows. 
-\begin{table}[H]
+In TensorFlow and most other deep learning libraries, there are two common RNN versions: static RNN and dynamic RNN. Dynamic RNN is pretty much what RNN should be like, it use a loop structure to process variable lenght of sequences. The static one, however, unrolls the loop and have a fixed size of computational node to process fixed length sequences, just as what Figure \ref{fig:1} shows. \par
+The benefits of using static RNN is it runs faster than a dynamic RNN, since it doesn't have to test the terminate condition for each time step. The actual speed comparison is listed in Table \ref{tb:rnn0}. What's more it is the only RNN implementation in early version of TnesorFlow. The problem of static RNN is that it makes the model too big. A big model have a lot of disadvantages. It use too much memory, both GPU and CPU memory, it consume more disk space to store the best model, and it takes more time to build the model. In this project the 700  sequence length 3 layers with 64 units model will some how use 20G memory and over 4G GPU memory. Comparing to the 4MB model file of dynamic RNN, It took 275MB to store the static model described above, which will slow down the training process every time it same the current best model. And the build time is longer than 10 minutes comparing to the several seconds of dynamic RNN's build time.\par
+
+The reason using a dynamic RNN is that it can adapt to different input and network architectures. Such as sequence to sequence model, which needs the encoder and decoder to be able to handle variable length sequences. When dealing with real life data, a model that accepts variable length input are general easier to use. The dynamic RNN is light weight, flexible and can achieve comparable speed of a static RNN(In table \ref{tb:rnn0} the dynamic rnn is about 8\% slower than the static one).\par
+\begin{table}[h] \label{tb:rnn0}
 	\centering
 	\begin{tabular}{lllrrr}
 	\hline
 	\multicolumn{3}{c}{Model} &
 	\multicolumn{3}{c}{Performance}\\
 	\cline{1-3}
-	Multi conv & RNN  & Output layers &  Build time(s) & speed(batch/s) & test accuracy(\%)\\
+	Multi conv & RNN  & Output layers &  Build time (s) &   \begin{tabular}{@{}c@{}}speed \\(batch/s)\end{tabular} & test accuracy(\%)\\
 	\hline
-	32 channels &- &conv 11 \\
-	64 channels &- &conv 11 \\
-	64 channels & \begin{tabular}{@{}c@{}}1 layer \\ static 32\end{tabular} &conv 11 \\
-	64 channels & \begin{tabular}{@{}c@{}}1 layer \\ dynamic 32\end{tabular} &conv 11 \\
-	64 channels & \begin{tabular}{@{}c@{}}1 layer \\ dynamic 2\end{tabular} &conv 11 \\
-	64 channels & \begin{tabular}{@{}c@{}}1 layer \\ dynamic 10\end{tabular} &conv 11 \\
-	64 channels & \begin{tabular}{@{}c@{}}1 layer \\ dynamic 128\end{tabular} &conv 11 \\
+	32 channels &- &conv 11  &0.69 &5.28 &65.3\\
+	64 channels &- &conv 11  &0.72 &3.44 &65.7\\
+	64 channels & \begin{tabular}{@{}c@{}}1 layer \\ static 32\end{tabular} &conv 11 &166.61 &0.77 &-\\
+	64 channels & \begin{tabular}{@{}c@{}}1 layer \\ dynamic 32\end{tabular} &conv 11 &1.43 &0.71 &68.7\\
+	64 channels & \begin{tabular}{@{}c@{}}1 layer \\ dynamic 2\end{tabular} &conv 11 &1.43 & 0.76 &67.8\\
+	64 channels & \begin{tabular}{@{}c@{}}1 layer \\ dynamic 10\end{tabular} &conv 11 &1.47 & 0.758 & 68.3\\
+	64 channels & \begin{tabular}{@{}c@{}}1 layer \\ dynamic 128\end{tabular} &conv 11 &1.41 &0.54 & 69.2\\
+	64 channels & \begin{tabular}{@{}c@{}}2 layer \\ dynamic 128\end{tabular} &conv 11 &1.94 &0.27 &69.5\\
 
 	\hline
 	\end{tabular}
 	\caption[Odd foods]{Another table which will show up in the the List of Tables as `Odd foods'; it is set to align ``here" in the text.}
 \end{table}
 
+Another important detail about RNN is when to stop the iteration. Continuing the iteration after reach the end of the sequence is inefficient, and may cause error when doing back propagation, since the network will try to learn the zero paddings that are irrelevant to the protein sequence. The problem is that proteins in each batch will have different length, so in order to stop the iteration correctly, we need to provide the length information for every protein in the batch.\par
+
+In summary, RNN layers in this project are dynamic bidirectional RNN, and provided with sequence length information for each sequence in the batch. The unit number of the RNN cell is 128.
+
 \subsection{output layers}
-
+There are two 1D convolution layer are build after RNN layers. The first one use kernel shape [1] and output channel size is half of the input channel size. The second layer use kernel shape [7] and the output channel is 14.\par
 \subsection{loss function}
+Different from convolution networks, RNN need sevreal additional steps to calculate the correct average loss value for each batch. Because RNN always deals with variable length data, such as English sentences and ,in this project, proteins. As illustrate in Figure \ref{fig:loss} the output of the network would be a 3D array with shape [batch\_size, sequence\_length, feature\_length]. As you may notice in the figure, there are blanks at the end of each sequence, those are zero paddings. Due to the variable length input data, the blanks are always exist. And consider the distribution in Figure \ref{fig:len_dist}, over half of the data in a batch are zeros. The correct loss function for individual sequence is Equation \ref{eq:loss}. However in practice, due to the parallel feature of the system, we have to calculate the loss for all the sequence in a batch at the same time. The result of the batch loss operation is a 2D array with shape [batch, sequence]. Each element in this array is the loss of a single amino acid. After calculating the loss array, a mask array is constructed using the length vector on the left of Figure \ref{fig:loss}. Apply the mask array to the loss matrix will set the loss of the blanks to zero. Finally the average loss per amino acid will be $sum(LOSS\_ARRAY)/sum(length\_vector)$.\par
 
+\begin{figure}[H] 
+	\centering
+	\includegraphics[width=5in]{Figures/loss}
+	\caption[Detail inside recurrent unit]{Illustration of recurrent network}
+	\label{fig:loss}
+\end{figure}
+
+\subsection{accuracy operator}
+The evaluation of the project is 8 classes accuracy(Q8). The algorithm of calculating Q8 accuracy from predictions and labels are the following.
+
+\begin{algorithm}[H] 
+ \KwData{\\Prediction [batch\_size, seq\_len, feature\_len]\\label [batch\_size, seq\_len, feature\_len]\\length\_vector [batch\_size, 1]}
+ \KwResult{Q\_8: real number}
+    conf\_mat = Confusion\_Matrix(label, prediction)\;
+    true\_positive = sum(diag(conf\_mat))\;
+    Q\_8 = true\_positive/sum(length\_vector)\;
+ \caption{Q\_8 accuracy }
+\end{algorithm}
+
+The implementation of this part is some how tricky. Because when we train the network, we want to monitor the training and validation accuracy in TensorBoard and TensorBoard only monitors the operator inside the Graph. So the whatever calculate the accuracy should be an operator inside the TensorFlow Graph. And it should not be a python function outside the Graph. So what I do here is constructing a accuracy operator using basic TensorFlow operators, and add it to the model. Then the calculation will perform inside the Graph and inside GPU. For more details see the code in Appendix.
