@@ -1,5 +1,6 @@
-\chapter{Background knowledge: Recurrent networks and LSTM}
+\chapter{RELATED WORKS}
 	\label{CH_02}
+
 
 \section{Recurrent networks}
 Different from other networks such as feed forward neural network(FFNN) and convolution neural network, recurrent network works well on problems that have sequential input such as speech recognition, language modeling, translation and image captioning. Figure \ref{fig:0} shows how a typical recurrent network looks like. A loop in the network allows it to pass the information from previous steps to the network to make a decision for the current input. In contrast to the fix length context window used in FFNN, RNN stores the activation of previous time step in hidden state and it provide context information within a undefined window size.
@@ -13,15 +14,15 @@ Different from other networks such as feed forward neural network(FFNN) and conv
 
 However, training conventional RNNs using back-propagation technique is difficult due to the vanishing gradient and exploding gradient problems\cite{bengio1994learning}. The gradient shifting problem make
 also make it difficult for the network to remember long time dependency that longer than 5-10 time steps between input and output.
-\section{Long Short term memory}
-In order to address the problem above, a special recurrent network architecture Long-Short-Term Memory(LSTM) have been proposed\cite{hochreiter1997long}. LSTM and it's variations have been successfully applied to sequence prediction, translation and sequence labeling tasks. In the rest of this chapter I will introduce how LSTM and one of its variantion GRU(gated recurrent unit) works.\par
+\subsection{Long Short term memory}
+In order to address the problem above, a special recurrent network architecture Long-Short-Term Memory(LSTM) have been proposed\cite{hochreiter1997long}. LSTM and it's variations have been successfully applied to sequence prediction, translation and sequence labeling tasks. The rest of this chapter will introduce how LSTM and one of its variantion GRU(gated recurrent unit) works.\par
 
 \subsection{Long short term memory}
-To make it easier to understand the idea of LSTM, let unroll the loop in the network and then we got a fix length static version of the same network(Figure \ref{fig:1}). The operation in the two RNN version are the same, the difference is the static version only take fix length input and don't have to consider when to stop the iteration thus it runs faster.\par
+To make it easier to understand the idea of LSTM, in Figure \ref{fig:1} the loop in the network been unrolled and results in a fix length static version of the same network. The operation in the two RNN version are the same, the difference is the static version only take fix length input and don't have to consider when to stop the iteration thus it runs faster.\par
 \begin{figure}[h] 
 	\centering
 	\includegraphics[width=6.0in]{Figures/recurrent2}
-	\caption[unrolled recurrent network]{Illustration of recurrent network}
+	\caption[unrolled recurrent network]{unrolled recurrent network}
 	\label{fig:1}
 \end{figure}
 
@@ -33,18 +34,18 @@ LSTM also have the same loop structure of conventional RNN, but it has different
 \begin{figure}[h] 
 	\centering
 	\includegraphics[width=6.0in]{Figures/recurrent3}
-	\caption[Detail inside recurrent unit]{Illustration of recurrent network}
+	\caption[Detail inside recurrent unit]{Detail inside recurrent unit}
 	\label{fig:2}
 \end{figure}
 
 \begin{figure}[h] 
 	\centering
 	\includegraphics[width=6.0in]{Figures/recurrent4}
-	\caption[Detail inside LSTM]{Illustration of recurrent network}
+	\caption[Detail inside LSTM]{Detail inside LSTM}
 	\label{fig:3}
 \end{figure}
 
-The first step of calculating the output $h_t$ of each time step is updating the cell state $C_t$. Because the output of each time step, is essentially the cell state masked by a weight matrix. In order to update the cell state, we need the output of the first three dense layer inside the cell which are forget gate layer, input gate layer and $tanh$ layer. The activation of these three layers can be calculated by using \ref{eq:0}, \ref{eq:1} and \ref{eq:2}. Then according to  \ref{eq:3} the network will decide how to update the cell state by forgetting some of the old state and remember some of the new input state.\par
+The first step of calculating the output $h_t$ of each time step is updating the cell state $C_t$. Because the output of each time step is essentially the cell state masked by a weight matrix. In order to update the cell state, the output of the first three dense layer inside the cell needed to be calculated. They are forget gate layer, input gate layer and $tanh$ layer respectively. The activation of these three layers can be calculated by using \ref{eq:0}, \ref{eq:1} and \ref{eq:2}. Then according to  \ref{eq:3} the network will decide how to update the cell state by forgetting some of the old state and remember some of the new input state.\par
 After updated the cell state, the network will calculate the output of this time step using \ref{eq:4} and \ref{eq:5}. More specifically speaking, \ref{eq:4} calculate the output gate weights $o_t$ and  \ref{eq:5} apply the weight to the activation of cell state. 
 \begin{subequations} 
     \begin{align}
@@ -78,11 +79,11 @@ The gate recurrent unit(GRU)\cite{cho2014learning} is a variance of LSTM. In fac
 \begin{figure}[h] 
 	\centering
 	\includegraphics[width=6.0in]{Figures/recurrent5}
-	\caption[unrolled recurrent network]{Illustration of recurrent network}
+	\caption[details in GRU]{details in GRU}
 	\label{fig:4}
 \end{figure}
 
-As we can see in Figure \ref{fig:4}, GRU merge the input gate and forget gate in LSTM cell into a single update gate $z_t$. The update gate $z_t$ selects whether the hidden state is to be updated with
+As illustrate in Figure \ref{fig:4}, GRU merge the input gate and forget gate in LSTM cell into a single update gate $z_t$. The update gate $z_t$ selects whether the hidden state is to be updated with
 a new hidden state $\tilde{h}$. The reset gate $r_t$ decides whether the previous hidden state is ignored. See Eqs. \ref{eq:GRU0}-\ref{eq:GRU1} for the detailed equations of $r, z, h$ and $\tilde{h}$.
 
 \begin{subequations} 
@@ -93,3 +94,9 @@ a new hidden state $\tilde{h}$. The reset gate $r_t$ decides whether the previou
         h_t &= (1 -z_t)\ast h_{t-1} + z_t\ast \tilde{h} \label{eq:GRU3}
     \end{align}	
 \end{subequations}
+
+\section{DNNs for protein secondary structure prediction}
+Despite some early attempts using neural networks as submodules to predict protein secondary structure such as condition conditional neural fields \cite{wang2011protein}. Several end-to-end trainable deep neural networks have also been proposed to solve the 8-class secondary structure prediction problem. The first one is a convolutional Generative Stochastic Network proposed by Zhou et al.\cite{zhou2014deep}. This method achieved 66.4\% 8-class accuracy on CB513. This model is not very effective since simply using multiple convolutional layers can also achieve 66\% accuracy. The second method, or second kind of architecture is using recurrent network combine with convolutional layers. Søren\cite{sonderby2014protein} and Z.Li et al. \cite{Z.Li2016} both proposed their recurrent neural network and achieved 67.4\% and 69.7\% 8-class accuracy respectively. The major difference of these two method is the first one using 1 layer bidirectional long short term memory(LSTM) cell as recurrent unit, the second one using 3 layers of bidirectional gated recurrent unit(GRU) cell instead. Søren provides the theano source code of the method on github and continues the development, the current best accuracy is 68.9\%. The last architecture is proposed by Busia et al.\cite{busia2016protein}. They stacks multiple convolutional blocks which similar to inception architecture in the network and get 70.6\% accuracy on CB513. Their convolutional model is designed to mimic the behavior of a recurrent sequence to sequence model and is evaluated using beam search. 
+% 2. convolutional Generative Stochastic Network achieved 66:4% 
+% 3. convolutional recurrent
+% 4 google inception net

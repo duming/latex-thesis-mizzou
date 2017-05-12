@@ -1,4 +1,12 @@
-\chapter{Summary and concluding remarks}
+\chapter{SUMMARY}
 	\label{CH_summary}
+The major achievements of this work is the following:
+\begin{enumerate}
+    \item Design and implement a DNN learning system in TensorFlow for PROTEIN SECONDARY STRUCTURE PREDICTION.
+    \item Provide detailed information on how to use RNN correctly.
+    \item Test and explore the trade off between speed and accuracy of the RNN.
+    \item Achieve 69.5\% accuracy on CB513, which is comparable to current state-of-the-art.
+\end{enumerate}
+This work, following the basic network architecture in \cite{Z.Li2016}, use bidirectional GRU RNN after multiscale convolutional layers. Instead of using the exact architecture in their work which has 3 RNN layer and 600 hidden units in each layer. Only 2 128-hidden-unit RNN layers have been used, due to the insufficient GPU memory. However, by using less layers and less hidden units and add batch normalization to the network. The network managed to achieve comparable performance on dataset CB513. The best Q8 accuracy is 69.5\% which is 0.2\% lower than theirs. However, because of the smaller model, it need less time to train the model. This thesis also shown how to design and build a system to train a recurrent network with variable length inputs.\par
 
-Congratulations on completing your dissertation.
+The recurrent structure can capture the global context information in the protein sequence and boost the performance of protein secondary structure prediction. However it can not fully capture the context information, simply stack the RNN layer can not out perform a single RNN layer with convolutional layers after it. A possible reason is the current off-the-shelf RNN structures can not deal with extremely long dependencies such as the average 230 length proteins. But there are huge potential in RNN networks. More powerful but complex RNN architectures such as RNN with attention mechanism\cite{luong2015effective} and RNN with batch normalization\cite{cooijmans2016recurrent} may be able to solve this problem. 

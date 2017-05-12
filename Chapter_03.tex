@@ -1,61 +1,81 @@
-\chapter{Network architectures}
+\chapter{DEEP NEURAL NETWORK ARCHITECTURES FOR PROTEIN SECONDARY STRUCTURE PREDICTION}
 	\label{CH_03}
 
+\section{Problem definition}
+The exact definition of protein secondary structure prediction in this work is the following. Given the amino acid sequence $a_0a_1...a_{l-1}, 0 \le i <l$ and the profile $p_0p_1...p_{l-1},  0 \le i <l$ of the of a protein. The goal is to predict the secondary structure of the protein which can also be represented as a sequence $s_0s_1...s_{l-1},0 \le i <l$. In general there are 21 different kinds of amino acid, so each $a_i$ have 21 different classes. And the profile $p_i$ is a vector of probabilities, $p_i[k]$ representing the possibilities of the $ith$ amino acid to be $kth$ class. As for the $s_i$, it has following 8 classes.\par
+\begin{table}[H] \label{tb:labels}
+	\centering
+	\begin{tabular}{lr}
+	label & name\\
+	\hline
+	H &$alpha$-helix \\
+    E &$beta$-strand \\
+    L & loop or irregular \\
+    T &$beta$-turn \\
+    S &bend \\
+    G &$3_10$-helix \\
+    B &$\beta$-bridge \\
+    I &$\pi$-helix \\
+    \hline
+	\end{tabular} 
+	\caption[secondary structure labels]{The label and its correspond names of 8-class secondary structure}
+\end{table}
 
-\section{Overall architecture}
-Z.Li et al. \cite{Z.Li2016} proposed a deep convolutional and recurrent neural network for predicting protein secondary structure. In their work a multiscale convolutional layer is followed by bidirectional GRU recurrent layers. In this work, I follow their general architecture as illustrate in Figure \ref{fig:overall_arch} which have preprocessing, multiscale convolution, recurrent and output four major parts. More details of these parts are explained in the following sections.
+\section{Network architecture}
+Z.Li et al. \cite{Z.Li2016} proposed a deep convolutional and recurrent neural network for predicting protein secondary structure. In their work a multiscale convolutional layer is followed by bidirectional GRU recurrent layers. This work follows their general architecture as illustrate in Figure \ref{fig:overall_arch} which have preprocessing, multiscale convolution, recurrent and output four major parts. More details of these parts are explained in the following sections.
 \begin{figure}[H] 
 	\centering
 	\includegraphics[width=3in]{Figures/overall_architecture}
-	\caption[Detail inside recurrent unit]{Illustration of recurrent network}
+	\caption[Overall architecture]{Overall architecture}
 	\label{fig:overall_arch}
 \end{figure}
 
-\section{Input and output}
-\subsection{Input}
+
+\subsection{Input and output}
+\subsubsection{Input}
 The input of the network have the shape of [sequence\_length, features]. In this work the number of features is 42, which contains two parts. For each amino acid in the sequence, the first 21 features is a one-hot-encoding indicate which amino acid it is. The last 21 features are the profiles features obtained from PSI-BLAST\cite{altschul1997gapped} which is a dense vector.
-\subsection{Output}
+\subsubsection{Output}
 The output the network have the shape of [sequence\_length, 8]. So for each amino acid in the sequence it will output a one-hot-encoding to indication which secondary structure it is.
 
 
-\section{Preprocessing}
+\subsection{Preprocessing}
 As illustrate in Figure \ref{fig:pre} What the preprocessing module does is converting the sparse one-hot-encoding of amino acid to a dense representation, and merge it with the dense profile feature vector. In order to avoid the inconsistency of feature representations. Same as the original work, a 21-by-50 embedding matrix is used. 
-Another poteintial benefit of using a embedding matrix is we can initialize the embedding matrix with a pretrained matrix which comes from a sequence auto-encoder.
+Another poteintial benefit of using a embedding matrix is the embedding matrix can be initialized with a pretrained matrix which comes from a sequence auto-encoder.
 
 \begin{figure}[H] 
 	\centering
 	\includegraphics[width=3in]{Figures/preprocessing}
-	\caption[Detail inside recurrent unit]{Illustration of recurrent network}
+	\caption[preprocess layer]{preprocess layer}
 	\label{fig:pre}
 \end{figure}
 
-\section{Multiscale convolution}
+\subsection{Multiscale convolution}
 After getting embedded features, the next step is using different 1-D convolutional kernels to extract loacl context information from the sequence. As shown in Figure \ref{fig:multi_conv}, total three kernels are used. Each of them have 64 output channels. And the shape of the kernel are 3, 7, 11 respectively. The kernel will moving along the protein with stride size 1. A concatenate layer will merge the output of three convolution layers and then a RELU layer will generate the activation. So far the module is the same as the one in original work. However in this work, a batch normalization layer is added after the activation. This layer will normalize the output of the module to have same distribution at each position and speed up the converging make the network learn faster. However, while learning faster, the model is more likely to overfit. Thus a dropout layer will also add at the end of this module.\par
 \begin{figure}[H] 
 	\centering
 	\includegraphics[width=3in]{Figures/multiscale_conv}
-	\caption[Detail inside recurrent unit]{Illustration of recurrent network}
+	\caption[multi-scale convolutional layer]{multi-scale convolutional layer}
 	\label{fig:multi_conv}
 \end{figure}
 
-\section{Recurrent layers}
+\subsection{Recurrent layers}
 In addition to the local dependency extracted by convolutional network, Z.Li et al. \cite{Z.Li2016} argued that long-range dependency is also important for secondary structure prediction. However a convolutional layer can not capture dependencies that longer than the kernel size. In order to capture long-range dependencies, bidirectional recurrent layers are placed after the multiscale convolution layer. Although conventional recurrent network are able to capture long dynamic range dependency, it very difficult to train due to gradient vanishing problem. So in recent years, only RNN with LSTM cells and its variance are practically used. In this work, are used instead of standard LSTM since it has less parameters and can achieve comparable result\cite{zaremba2015empirical}. Figure \ref{fig:rnn_layer} shows the structure of a single bidirectional GRU layer. In this layer, there are actually two RNN layers, a forward layer scan from the first position of the sequence to the last position, and a backward layer which scan from the last to the first position. And the output features of forward and backward layer at each position will be concatenated together to form the final output of the bidirectional GRU layer.\par
 
 
 
-\section{Output layers}
+\subsection{Output layers}\label{sec:output_layer}
 The main function of the output layers is adjusting the dimension of the feature from previous layer to match the size of the label. In typical classification task, several fully connected layers are served for this purpose. For example in \cite{Z.Li2016} 2 fully connected layers are put together, adjusting the hidden feature to the size of 14 for each residue in the sequence. \\
-However busia et al. \cite{busia2016protein} use a little different approach. In stead of using the hidden feature of each amino acid as the input of the fully connected layer, they use a sliding window of 11, and use the flattened context features of 11 amino acid as the input of the fully connected layers. Inspired by the sliding window method, in this work, I use a simple convolution layer of kernel size 11 for the same purpose, because it easier to implement.\par
+However busia et al. \cite{busia2016protein} use a little different approach. In stead of using the hidden feature of each amino acid as the input of the fully connected layer, they use a sliding window of 11, and use the flattened context features of 11 amino acid as the input of the fully connected layers. Inspired by the sliding window method,  this work use a simple convolution layer of kernel size 11 for the same purpose, because it easier to implement.\par
 
 \begin{figure}[H] 
 	\centering
 	\includegraphics[width=3in]{Figures/rnn_layer}
-	\caption[Detail inside recurrent unit]{Illustration of recurrent network}
+	\caption[Recurrent layer]{Recurrent layer}
 	\label{fig:rnn_layer}
 \end{figure}
 
 
-\section{Loss and optimizer}
+\subsection{Loss and optimizer}
 The loss function are composed of three parts, the average cross-entropy loss between predicted secondary structure and true secondary structure, the average cross-entropy loss of solvent accessibility and the summary of all l2 norm  weight regularization. For each protein sequence of length $l$ the loss function formulate as equation \ref{eq:loss}. 
 \begin{subequations} 
     \begin{align}

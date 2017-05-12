@@ -1,10 +1,10 @@
-\chapter{System design and implementation detail}
+\chapter{DESIGN AND IMPLEMENTATION OF A DNN LEARNING SYSTEM IN TENSORFLOW FOR PROTEIN SECONDARY STRUCTURE PREDICTION}
 	\label{CH_04}
-Deep learning in these days are not just simply building a model, train it on training set and test it on testing set. On one hand, there is a common trend in recent development of new network architectures. That is modularization, instead of finding a best architecture for a certain task, the most exciting and successful techniques are focusing on finding modules or strategy that can be add to current architectures and improve the performance. For example, dropout and batch normalization are layers that can be add after every activation in order to speed up the learning and prevent overfitting. And residue net and inception \cite{szegedy2015going} construct their structure by stacking modules repeatedly. So a good deep learning program should be able to easily add or remove certain module or function to/from the model. On the other hand, while the network architecture becoming more complex and the dateset getting bigger, the training time are getting longer and often need to run the program on GPU, multi-GPUs or clusters. In order to meet different requirements without changing the program too much, a robust and flexible program are needed. Fortunately, TensorFlow provides excellent building blocks to build such programs and in the following sections, I will introduce the design and TensorFlow implementation of a system that has training, validation, testing, inference, logging, monitoring and save/restore functions.
+Deep learning in these days are not just simply building a model, train it on training set and test it on testing set. On one hand, there is a common trend in recent development of new network architectures. That is modularization, instead of finding a best architecture for a certain task, the most exciting and successful techniques are focusing on finding modules or strategy that can be add to current architectures and improve the performance. For example, dropout and batch normalization are layers that can be add after every activation in order to speed up the learning and prevent overfitting. And residue net and inception \cite{szegedy2015going} construct their structure by stacking modules repeatedly. So a good deep learning program should be able to easily add or remove certain module or function to/from the model. On the other hand, while the network architecture becoming more complex and the dateset getting bigger, the training time are getting longer and often need to run the program on GPU, multi-GPUs or clusters. In order to meet different requirements without changing the program too much, a robust and flexible program are needed. Fortunately, TensorFlow provides excellent building blocks to build such programs and the following sections will introduce the design and TensorFlow implementation of a system that has training, validation, testing, inference, logging, monitoring and save/restore functions.
 
 \section{System design}
 \subsection{A brief introduce of TensorFlow mechanism}
-The unique way of how TensorFlow works have a huge influence on the system design fashion. So it's important to have some understanding of TensorFow, before we start talking about the system. \par
+The unique way of how TensorFlow works have a huge influence on the system design fashion. So it's important to have some understanding of TensorFow, before introducing the system. \par
 There are two major parts in every TensorFlow program, that is graph and session.
 \begin{enumerate}
    \item Graph: a computational model contains all the operation you want to perform on the dataset.
@@ -21,7 +21,7 @@ There are two major parts in every TensorFlow program, that is graph and session
 \end{enumerate}
 
 
-\subsection{overall design}
+\subsection{Overall design}
 As illustrate in Figure \ref{fig:system}, the system has four module in general:
 \begin{enumerate}
    \item Main module: The most important module in the system, contains the network architecture described in Chapter \ref{CH_03}. And inside the main module, there are three sub-modules in order to separate the training validation and inference procedure. This design makes it possible to run the training, validation and inference procedure using different threads and on different devices(CPUs/GPUs). 
@@ -34,15 +34,15 @@ As illustrate in Figure \ref{fig:system}, the system has four module in general:
 \begin{figure}[H] 
 	\centering
 	\includegraphics[width=4in]{Figures/system}
-	\caption[Detail inside recurrent unit]{Illustration of recurrent network}
+	\caption[System overview]{System overview}
 	\label{fig:system}
 \end{figure}
 
 
-\subsection{training, evaluation, inference module design}
+\subsection{Training, evaluation, inference module design}
 Now let's further demonstrate the detail of the main module in Figure \ref{fig:system}. As illustrate in Figure \ref{fig:system_detail} the main module have three different sub-modules, they are training, evaluation and inference. According to different functionality, they have different components. The simplest one is the inference module. This module is only used when user already have a trained model and what to predict the secondary structures for new proteins. The only output is the prediction. The other relative simple one is the Evaluation model, this module is useful when user want to calculate the model performance on certain dataset. So beside prediction, this module also calculate the accuracy and loss. The last module is the training module, which calculate the gradient and update the correspond parameters in the model.\par
 
-The following pseudo code is a pipeline for training a deep neural network. Generally speaking, when training a network,  it's better to evaluate the training model in real time. In this way we can save running time by early stopping the training when the model start overfitting or the improvement is really small. Comparing to the method that save a series of candidate best models. This approach also saves disk space, because at each time the system only need to keep two checkpoint files, one file records the current training process, the other records the best model which is the one with the highest validation accuracy.\par
+The following pseudo code is a pipeline for training a deep neural network. Generally speaking, when training a network, it's better to evaluate the training model in real time. It can save running time by early stopping the training when the model start overfitting or the improvement is really small. Comparing to the method that save a series of candidate best models. This approach also saves disk space, because at each time the system only need to keep two checkpoint files, one file records the current training process, the other records the best model which is the one with the highest validation accuracy.\par
 
 
 \begin{program}
@@ -67,23 +67,23 @@ The most straightforward way to implement the training pipeline with validation 
    \item If only one model is built for training and validation, the output and statistics of training and validation will be mixed together, since the monitor and output operator is also parts of the TensorFlow Graph, and can not be modified after the building phase. 
    
 \end{enumerate}
-So with different modules for different purposes in the graph, we can have separate input, output and monitor method for each module. When we want to train a model with validation, we can first build the training module, and then build a Evaluation module with validate dataset. And the two modules are set to share the same model parameters, to make sure the validation module are actually using learned model. When we need test result on test dataset, only a evaluation module will be build with test dataset, and the model will be initialized using saved model on hard disk.
+So with different modules for different purposes in the graph, users can have separate input, output and monitor method for each module. When users want to train a model with validation, they can first build the training module, and then build a Evaluation module with validate dataset. And the two modules are set to share the same model parameters, to make sure the validation module are actually using learned model. When users need test result on test dataset, only a evaluation module will be build with test dataset, and the model will be initialized using saved model on hard disk.
 \begin{figure}[H] 
 	\centering
 	\includegraphics[width=5in]{Figures/system_detail}
-	\caption[Detail inside recurrent unit]{Illustration of recurrent network}
+	\caption[Detail inside modules]{Detail inside modules}
 	\label{fig:system_detail}
 \end{figure}
 
 \subsection{Implementation details}
 \subsection{Input}
 % introduce batch
-In the network architecture discussed in Chapter \ref{CH_03}, the input is a single training example. However in practice, the input should always be a batch of multiple examples. In this case, the batch contain 64 protein sequences. And each protein sequence are normalized to 700 hundred length(protein shorter than 700 hundred pad with zeros and protein longer than 700 are cut into segments).  Figure \ref{fig:len_dist} shows the distribution of protein length, the mean value is 208, most of the proteins are shorter than 300. So in each batch, there will be more than half of the data in it are zero paddings. And these zero paddings are actual affect the performance of the network, which I will show in following sections. So in order to deal with zero paddings, besides the original input data, the length of each protein will also add to each batch. So each batch will have a shape of [64, 700, 42 + 1].
+In the network architecture discussed in Chapter \ref{CH_03}, the input is a single training example. However in practice, the input should always be a batch of multiple examples. In this case, the batch contain 64 protein sequences. And each protein sequence are normalized to 700 hundred length(protein shorter than 700 hundred pad with zeros and protein longer than 700 are cut into segments).  Figure \ref{fig:len_dist} shows the distribution of protein length, the mean value is 208, most of the proteins are shorter than 300. So in each batch, there will be more than half of the data in it are zero paddings. And these zero paddings are actual affect the performance of the network, which will be shown in following sections. So in order to deal with zero paddings, besides the original input data, the length of each protein will also add to each batch. So each batch will have a shape of [64, 700, 42 + 1].
 
 \begin{figure}[H] 
 	\centering
 	\includegraphics[width=5in]{Figures/length_distribution}
-	\caption[Detail inside recurrent unit]{Illustration of recurrent network}
+	\caption[Distribution of protein length]{Distribution of protein length}
 	\label{fig:len_dist}
 \end{figure}
 
@@ -94,20 +94,20 @@ In this project, training module is using the file input pipeline. However evalu
 \begin{figure}[H] 
 	\centering
 	\includegraphics[width=5in]{Figures/input}
-	\caption[Detail inside recurrent unit]{Illustration of recurrent network}
+	\caption[Input Queues]{Input Queues}
 	\label{fig:input}
 \end{figure}
 
 
-\subsection{multi-scale convolution}
+\subsection{Multi-scale convolution}
 
-\subsection{recurrent layer}
+\subsection{Recurrent layer}
 When implementing the recurrent layer, there are two things should be considered. 
 \begin{enumerate}
    \item Use dynamic RNN or a static RNN.
    \item When shoul RNN stop calculating for each batch.
 \end{enumerate}
-In TensorFlow and most other deep learning libraries, there are two common RNN versions: static RNN and dynamic RNN. Dynamic RNN is pretty much what RNN should be like, it use a loop structure to process variable lenght of sequences. The static one, however, unrolls the loop and have a fixed size of computational node to process fixed length sequences, just as what Figure \ref{fig:1} shows. \par
+In TensorFlow and most other deep learning libraries, there are two common RNN versions: static RNN and dynamic RNN. Dynamic RNN is pretty much what RNN should be like, it use a loop structure to process variable length of sequences. The static one, however, unrolls the loop and have a fixed number of computational nodes to process fixed length sequences, just as what Figure \ref{fig:1} shows. \par
 The benefits of using static RNN is it runs faster than a dynamic RNN, since it doesn't have to test the terminate condition for each time step. The actual speed comparison is listed in Table \ref{tb:rnn0}. What's more it is the only RNN implementation in early version of TnesorFlow. The problem of static RNN is that it makes the model too big. A big model have a lot of disadvantages. It use too much memory, both GPU and CPU memory, it consume more disk space to store the best model, and it takes more time to build the model. In this project the 700  sequence length 3 layers with 64 units model will some how use 20G memory and over 4G GPU memory. Comparing to the 4MB model file of dynamic RNN, It took 275MB to store the static model described above, which will slow down the training process every time it same the current best model. And the build time is longer than 10 minutes comparing to the several seconds of dynamic RNN's build time.\par
 
 The reason using a dynamic RNN is that it can adapt to different input and network architectures. Such as sequence to sequence model, which needs the encoder and decoder to be able to handle variable length sequences. When dealing with real life data, a model that accepts variable length input are general easier to use. The dynamic RNN is light weight, flexible and can achieve comparable speed of a static RNN(In table \ref{tb:rnn0} the dynamic rnn is about 8\% slower than the static one).\par
@@ -131,27 +131,27 @@ The reason using a dynamic RNN is that it can adapt to different input and netwo
 
 	\hline
 	\end{tabular}
-	\caption[Odd foods]{Another table which will show up in the the List of Tables as `Odd foods'; it is set to align ``here" in the text.}
+	\caption[Comparison of Static and Dynamic RNN]{Comparison of Static and Dynamic RNN}
 \end{table}
 
-Another important detail about RNN is when to stop the iteration. Continuing the iteration after reach the end of the sequence is inefficient, and may cause error when doing back propagation, since the network will try to learn the zero paddings that are irrelevant to the protein sequence. The problem is that proteins in each batch will have different length, so in order to stop the iteration correctly, we need to provide the length information for every protein in the batch.\par
+Another important detail about RNN is when to stop the iteration. Continuing the iteration after reach the end of the sequence is inefficient, and may cause error when doing back propagation, since the network will try to learn the zero paddings that are irrelevant to the protein sequence. The problem is that proteins in each batch will have different length, so in order to stop the iteration correctly, it is required to provide the length information for every protein in the batch.\par
 
 In summary, RNN layers in this project are dynamic bidirectional RNN, and provided with sequence length information for each sequence in the batch. The unit number of the RNN cell is 128.
 
-\subsection{output layers}
+\subsection{Output layers}
 There are two 1D convolution layer are build after RNN layers. The first one use kernel shape [1] and output channel size is half of the input channel size. The second layer use kernel shape [7] and the output channel is 14.\par
 \subsection{loss function}
-Different from convolution networks, RNN need sevreal additional steps to calculate the correct average loss value for each batch. Because RNN always deals with variable length data, such as English sentences and ,in this project, proteins. As illustrate in Figure \ref{fig:loss} the output of the network would be a 3D array with shape [batch\_size, sequence\_length, feature\_length]. As you may notice in the figure, there are blanks at the end of each sequence, those are zero paddings. Due to the variable length input data, the blanks are always exist. And consider the distribution in Figure \ref{fig:len_dist}, over half of the data in a batch are zeros. The correct loss function for individual sequence is Equation \ref{eq:loss}. However in practice, due to the parallel feature of the system, we have to calculate the loss for all the sequence in a batch at the same time. The result of the batch loss operation is a 2D array with shape [batch, sequence]. Each element in this array is the loss of a single amino acid. After calculating the loss array, a mask array is constructed using the length vector on the left of Figure \ref{fig:loss}. Apply the mask array to the loss matrix will set the loss of the blanks to zero. Finally the average loss per amino acid will be $sum(LOSS\_ARRAY)/sum(length\_vector)$.\par
+Different from convolution networks, RNN need several additional steps to calculate the correct average loss value for each batch. Because RNN always deals with variable length data, such as English sentences and ,in this project, proteins. As illustrate in Figure \ref{fig:loss} the output of the network would be a 3D array with shape [batch\_size, sequence\_length, feature\_length]. As you may notice in the figure, there are blanks at the end of each sequence, those are zero paddings. Due to the variable length input data, the blanks are always exist. And consider the distribution in Figure \ref{fig:len_dist}, over half of the data in a batch are zeros. The correct loss function for individual sequence is Equation \ref{eq:loss}. However in practice, due to the parallel feature of TensorFlow, it is required to calculate the loss for all the sequence in a batch at the same time. The result of the batch loss operation is a 2D array with shape [batch, sequence]. Each element in this array is the loss of a single amino acid. After calculating the loss array, a mask array is constructed using the length vector on the left of Figure \ref{fig:loss}. Apply the mask array to the loss matrix will set the loss of the blanks to zero. Finally the average loss per amino acid will be $sum(LOSS\_ARRAY)/sum(length\_vector)$.\par
 
 \begin{figure}[H] 
 	\centering
 	\includegraphics[width=5in]{Figures/loss}
-	\caption[Detail inside recurrent unit]{Illustration of recurrent network}
+	\caption[Variable length batch Input]{Variable length batch Input}
 	\label{fig:loss}
 \end{figure}
 
-\subsection{accuracy operator}
-The evaluation of the project is 8 classes accuracy(Q8). The algorithm of calculating Q8 accuracy from predictions and labels are the following.
+\subsection{Accuracy operator}
+The evaluation of the project is 8 classes accuracy(Q8). The algorithm of calculating Q8 accuracy from predictions and labels is the following.\newline
 
 \begin{algorithm}[H] 
  \KwData{\\Prediction [batch\_size, seq\_len, feature\_len]\\label [batch\_size, seq\_len, feature\_len]\\length\_vector [batch\_size, 1]}
@@ -159,7 +159,47 @@ The evaluation of the project is 8 classes accuracy(Q8). The algorithm of calcul
     conf\_mat = Confusion\_Matrix(label, prediction)\;
     true\_positive = sum(diag(conf\_mat))\;
     Q\_8 = true\_positive/sum(length\_vector)\;
- \caption{Q\_8 accuracy }
+ \caption{Q8 accuracy }
 \end{algorithm}
+\vspace{0.5cm}
+The implementation of this part is some how tricky. Because when users train the network, they want to monitor the training and validation accuracy in TensorBoard and TensorBoard only monitors the operator inside the Graph. So whatever calculate the accuracy should be an operator inside the TensorFlow Graph. And it should not be a python function outside the Graph. So the correct implementation here is constructing a accuracy operator using basic TensorFlow operators, and add it to the model. Then the calculation will perform inside the Graph and inside GPU. For more details see the code in Appendix.\par
 
-The implementation of this part is some how tricky. Because when we train the network, we want to monitor the training and validation accuracy in TensorBoard and TensorBoard only monitors the operator inside the Graph. So the whatever calculate the accuracy should be an operator inside the TensorFlow Graph. And it should not be a python function outside the Graph. So what I do here is constructing a accuracy operator using basic TensorFlow operators, and add it to the model. Then the calculation will perform inside the Graph and inside GPU. For more details see the code in Appendix.
+\subsection{Training Monitor}
+The actual monitor of the system has two separate parts. The first part is the summary operators inside the TensorFlow Graph which save the value of desired tensors in log files periodically. The tensors(variables) that are monitored in this projects are the following:
+
+\begin{multicols}{2}
+  \begin{enumerate}
+  \item training module
+  \begin{itemize}
+    \item training loss
+    \item training accuracy
+  \end{itemize} 
+  
+  \item validation module
+  \begin{itemize}
+    \item validation loss
+    \item validation accuracy
+  \end{itemize}
+  
+  \item Input module
+  \begin{itemize}
+      \item input queue occupancy
+      \item running speed (batch/sec)
+  \end{itemize}
+  \item Distributions and histogram
+  \begin{itemize}
+      \item output of Multi CNN
+      \item output of RNN layers
+  \end{itemize}
+  \end{enumerate}
+\end{multicols}
+The second part is a visualization tool called TensorBoard. It a command line tool come with the TensorFlow library. What it dose is reading the log file from the path you provide, and start to host a web page(Figure \ref{fig:monitor}) which have all the graphs on it. The web page will refresh periodically, so users can use the web page as a real time monitor of the training process. The advantage of using TensorBoard is the flexibility. Users can choose when they want the visualization, one can easily turn off the monitor without interrupting the training. And users can also choose where they wan to put the visualization, a model may be trained on a server, and the use can monitor the training by visiting the web page on other computers. 
+\begin{figure}[H] 
+	\centering
+	\includegraphics[width=5in]{Figures/monitor}
+	\caption[Tensorboard visualization]{Tensorboard visualization}
+	\label{fig:monitor}
+\end{figure}
+
+\subsection{Save and Restore}
+The system saves checkpoint files periodically, since the training process usually take hours to complete, it's important to only keep the newest N checkpoints files. In this project, when training the system will check if there are more than 5 checkpoint files, if true then delete the oldest one. When the system restore training, it will search for the newest checkpoint file and start the training from there. Another file need to save is the best model file, it similar to a checkpoint file, but it only save the trainable parameters instead of all the variables inside the model that are needed to restore training.
